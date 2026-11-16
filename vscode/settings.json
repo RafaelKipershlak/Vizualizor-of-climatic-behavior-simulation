@@ -1,0 +1,9 @@
+{
+    "cmake.configureOnOpen": true,
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "cmake.environment": {
+        "VK_ICD_FILENAMES": "${env:HOME}/VulkanSDK/1.4.363.0/macOS/share/vulkan/icd.d/MoltenVK_icd.json",
+        "VK_LAYER_PATH": "${env:HOME}/VulkanSDK/1.4.363.0/macOS/share/vulkan/explicit_layer.d"
+    }
+}
