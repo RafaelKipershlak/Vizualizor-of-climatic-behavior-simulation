@@ -1,10 +1,10 @@
 # Build directories
-build/
-cmake-build-*/
-out/
+**/build/
+**/cmake-build-*/
+**/out/
 
 # Visual Studio
-.vs/
+**/.vs/
 *.sln
 *.slnx
 *.vcxproj
@@ -23,6 +23,6 @@ out/
 *.lib
 
 # IDE settings
-.vscode/
-vscode/
-settings.json
+**/.vscode/
+**/vscode/
+**/settings.json
