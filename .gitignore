@@ -23,4 +23,6 @@ out/
 *.lib
 
 # IDE settings
+.vscode/
 vscode/
+settings.json
