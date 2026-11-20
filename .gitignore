@@ -11,6 +11,9 @@
 *.vcxproj.user
 *.vcxproj.filters
 
+# Windows Visual Studio build output
+**/x64/
+
 # macOS
 .DS_Store
 
