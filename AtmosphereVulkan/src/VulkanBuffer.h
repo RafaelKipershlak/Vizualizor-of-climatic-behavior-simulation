@@ -27,6 +27,7 @@ class VulkanBuffer
         VkBuffer buffer{ VK_NULL_HANDLE };
         VkDeviceMemory memory{ VK_NULL_HANDLE };
         VkDeviceSize size{ 0 };
+        void* mappedPtr = nullptr;
         
     public:
         // Flexible Constructor with default parameters for sharing mode
@@ -65,6 +66,7 @@ class VulkanBuffer
         VkBuffer getBuffer() const { return buffer; }
         VkDeviceMemory getMemory() const { return memory; }
         VkDeviceSize getSize() const { return size; }
+        void* getMappedPtr() const noexcept { return mappedPtr; }
         
         // Helper to find GPU memory type (Host Visible vs. Device Local)
         static uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties);

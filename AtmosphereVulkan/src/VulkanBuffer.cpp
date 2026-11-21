@@ -119,6 +119,17 @@ VulkanBuffer::VulkanBuffer(
 	}
 
 	std::cout << " Memory binded successfully!\n";
+
+	// Persistent host mapping for CPU-accessible buffers
+    if (memoryLocation == MemoryType::CpuToGpu || memoryLocation == MemoryType::GpuToCpu)
+    {
+        result = vkMapMemory(device, memory, 0, size, 0, &mappedPtr);
+        if (result != VK_SUCCESS)
+        {
+            std::cout << "Failed to persistently map buffer memory!\n";
+            mappedPtr = nullptr;
+        }
+    }
 }
 
 // 2. Delegating Constructor (converts BufferType to VkBufferUsageFlags and delegates)
@@ -147,14 +158,19 @@ VulkanBuffer::VulkanBuffer(
 
 VulkanBuffer::~VulkanBuffer() {
 	std::cout << "\n";
-
-	if (memory != VK_NULL_HANDLE) {
-		vkFreeMemory(device, memory, nullptr);
-		std::cout << "Buffer memory freed.\n";
-	}
+	if (mappedPtr != nullptr && memory != VK_NULL_HANDLE) {
+        vkUnmapMemory(device, memory);
+        mappedPtr = nullptr;
+    }
+	
 	if (buffer != VK_NULL_HANDLE) {
 		vkDestroyBuffer(device, buffer, nullptr);
 		std::cout << "VkBuffer destroyed.\n";
+	}
+	
+	if (memory != VK_NULL_HANDLE) {
+		vkFreeMemory(device, memory, nullptr);
+		std::cout << "Buffer memory freed.\n";
 	}
 }
 
@@ -174,33 +190,64 @@ uint32_t VulkanBuffer::findMemoryType(VkPhysicalDevice physicalDevice, uint32_t 
 	throw std::runtime_error("Failed to find suitable memory type!");
 }
 
+
 void VulkanBuffer::copyTo(const void* data, VkDeviceSize dataSize, VkDeviceSize offset) {
+    if (mappedPtr == nullptr) {
+        std::cout << "Cannot copy data: Buffer is not host-mapped (is it GpuOnly?)!\n";
+        return;
+    }
 
-	if (memory == VK_NULL_HANDLE) {
-		std::cout << "Cannot copy data: Buffer memory is null!\n";
-		return;
-	}
+    if (offset + dataSize > size) {
+        std::cout << "Cannot copy data: Target size exceeds buffer size!\n";
+        return;
+    }
 
-	if (offset + dataSize > size) {
-		std::cout << "Cannot copy data: Target size exceeds buffer size!\n";
-		return;
-	}
-	
-	// 1. Map GPU memory to CPU-accessible pointer
-	void* mappedData = nullptr;
-	VkResult result = vkMapMemory(device, memory, offset, dataSize, 0, &mappedData);
+    // Cast to char* for safe byte-level pointer arithmetic with offset
+    std::memcpy(static_cast<char*>(mappedPtr) + offset, data, static_cast<size_t>(dataSize));
+}
 
-	if (result != VK_SUCCESS)
-	{
-		std::cout << "Failed to map memory!\n";
-		return;
-	}
+VulkanBuffer::VulkanBuffer(VulkanBuffer&& other) noexcept
+    : device(other.device),
+      buffer(other.buffer),
+      memory(other.memory),
+      size(other.size),
+      mappedPtr(other.mappedPtr)
+{
+    other.device = VK_NULL_HANDLE;
+    other.buffer = VK_NULL_HANDLE;
+    other.memory = VK_NULL_HANDLE;
+    other.size = 0;
+    other.mappedPtr = nullptr;
+}
 
-	std::cout << "memory map was successfull!\n";
+VulkanBuffer& VulkanBuffer::operator=(VulkanBuffer&& other) noexcept
+{
+    if (this != &other)
+    {
+        // 1. Clean up any existing resources owned by *this
+        if (mappedPtr != nullptr && memory != VK_NULL_HANDLE) {
+            vkUnmapMemory(device, memory);
+        }
+        if (memory != VK_NULL_HANDLE) {
+            vkFreeMemory(device, memory, nullptr);
+        }
+        if (buffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(device, buffer, nullptr);
+        }
 
-	// 2. Copy CPU data to mapped GPU address
-	std::memcpy(mappedData, data, static_cast<size_t>(dataSize));
+        // 2. Steal resources from other
+        device = other.device;
+        buffer = other.buffer;
+        memory = other.memory;
+        size = other.size;
+        mappedPtr = other.mappedPtr;
 
-	// 3. Unmap memory
-	vkUnmapMemory(device, memory);
+        // 3. Leave other in a safe, empty state
+        other.device = VK_NULL_HANDLE;
+        other.buffer = VK_NULL_HANDLE;
+        other.memory = VK_NULL_HANDLE;
+        other.size = 0;
+        other.mappedPtr = nullptr;
+    }
+    return *this;
 }

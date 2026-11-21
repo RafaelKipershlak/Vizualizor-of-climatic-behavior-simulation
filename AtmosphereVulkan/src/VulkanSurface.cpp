@@ -52,12 +52,12 @@ VkSurfaceFormatKHR  VulkanSurface::chooseSurfaceFormat(const std::vector<VkSurfa
     return formats[0];
 }
 
-VulkanSurface::VulkanSurface(VkInstance instance, GLFWwindow* window, VkPhysicalDevice physicalDevice) : instance(instance), physicalDevice(physicalDevice), window(window)
+VulkanSurface::VulkanSurface(VkInstance instance, GLFWwindow* window, VkPhysicalDevice physicalDevice, uint32_t graphicsFamily) : instance(instance), physicalDevice(physicalDevice), window(window)
 {
     //==========================================================
     //create vulkan surface
     //==========================================================
-
+  
     VkResult result = glfwCreateWindowSurface(
         instance,
         window,
@@ -83,7 +83,7 @@ VulkanSurface::VulkanSurface(VkInstance instance, GLFWwindow* window, VkPhysical
 
     result = vkGetPhysicalDeviceSurfaceSupportKHR(
         physicalDevice,
-        0,
+        graphicsFamily, // Use the actual graphics family index
         surface,
         &presentSupport
     );

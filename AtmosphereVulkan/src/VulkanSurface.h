@@ -21,7 +21,7 @@ class VulkanSurface
 		const char* formatToString(VkFormat format);
 
 	public:
-		VulkanSurface(VkInstance instance, GLFWwindow* window, VkPhysicalDevice physicalDevice);
+		VulkanSurface(VkInstance instance, GLFWwindow* window, VkPhysicalDevice physicalDevice, uint32_t graphicsFamily);
 		~VulkanSurface();
 
 		VkSurfaceKHR getSurface() const { return surface; };

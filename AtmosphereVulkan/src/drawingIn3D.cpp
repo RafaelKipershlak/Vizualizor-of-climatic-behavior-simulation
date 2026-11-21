@@ -26,7 +26,7 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
     VkPhysicalDevice physicalDevice = vkSetup->getPhysicalDevice();
 
     // 1. Create surface
-    VulkanSurface surface(vkSetup->getInstance(), window, physicalDevice);
+    VulkanSurface surface(vkSetup->getInstance(), window, physicalDevice, vkSetup->getGraphicsFamily());
 
     // 2. Create swapchain
     Swapchain swapchain(surface, device);

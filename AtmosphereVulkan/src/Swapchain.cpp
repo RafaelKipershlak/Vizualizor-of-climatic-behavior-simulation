@@ -17,7 +17,7 @@ Swapchain::Swapchain(const VulkanSurface& vkSurface, VkDevice device) : device(d
     swapchainInfo.imageFormat = vkSurface.getFormat().format; // This determines how the image stores its color information.
     swapchainInfo.imageColorSpace = vkSurface.getFormat().colorSpace;
     swapchainInfo.imageArrayLayers = imageArrayLayers; //how many image layers each swapchain image has.
-    swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; //What kinds of operations is this image allowed to be used for?
+    swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT; //What kinds of operations is this image allowed to be used for?
     swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE; //This image is owned by one queue family at a time.
     swapchainInfo.preTransform = vkSurface.getCapabilities().currentTransform;
     swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
