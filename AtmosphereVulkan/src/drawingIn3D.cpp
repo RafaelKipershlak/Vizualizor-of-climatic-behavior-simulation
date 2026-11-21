@@ -467,7 +467,7 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
                 {0,0},
                 {
                     { f / aspect,  0.0f,  0.0f,                                             0.0f },
-                    { 0.0f,        f,     0.0f,                                             0.0f },
+                    { 0.0f,        -f,     0.0f,                                             0.0f },
                     { 0.0f,        0.0f,  farPlane / (nearPlane - farPlane),                -1.0f },
                     { 0.0f,        0.0f,  (farPlane * nearPlane) / (nearPlane - farPlane),  0.0f }
                 },
