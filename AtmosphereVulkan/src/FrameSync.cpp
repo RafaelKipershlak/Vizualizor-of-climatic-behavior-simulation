@@ -1,4 +1,6 @@
 #include "FrameSync.h"
+#include <iostream>
+#include <stdexcept>
 
 FrameSync::FrameSync(VkDevice device, uint32_t framesInFlight, uint32_t swapchainImageCount)
 {

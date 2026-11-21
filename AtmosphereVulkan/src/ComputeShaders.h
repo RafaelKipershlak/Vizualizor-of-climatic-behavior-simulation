@@ -1,12 +1,11 @@
 #pragma once
-#include <iostream>
-#include <vulkan/vulkan.h>
-#include "VulkanSetup.h"
-#include "VulkanBuffer.h"
+#include <cstdint>
+#include <string>
 #include <vector>
-#include <chrono>
-#include <fstream>
-#include <stdexcept>
+#include <vulkan/vulkan.h>
+
+class VulkanBuffer; // Forward declaration (replaces #include "VulkanBuffer.h")
+
 
 class ComputeShaders
 {

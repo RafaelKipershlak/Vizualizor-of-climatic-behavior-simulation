@@ -1,12 +1,7 @@
 #pragma once
-#include <iostream>
 #include <vulkan/vulkan.h>
-#include "VulkanSetup.h"
-#include "VulkanBuffer.h"
 #include <vector>
-#include <chrono>
-#include <fstream>
-#include <stdexcept>
+#include <string>
 
 class GraphicsPipeline
 {

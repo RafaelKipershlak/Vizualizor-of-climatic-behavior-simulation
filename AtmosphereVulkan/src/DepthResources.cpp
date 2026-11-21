@@ -1,4 +1,7 @@
 #include "DepthResources.h"
+#include "VulkanBuffer.h"
+#include <vector>
+#include <stdexcept>
 
 VkFormat DepthResources::findSupportedDepthFormat(VkPhysicalDevice physicalDevice)
 {

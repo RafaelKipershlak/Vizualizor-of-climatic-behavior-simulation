@@ -1,5 +1,8 @@
 #include "GraphicsPipeline.h"
 #include "Vertex.h"
+#include <fstream>
+#include <iostream>
+#include <stdexcept>
 
 std::vector<char> GraphicsPipeline::readFileVertex(const std::string& filename)
 {

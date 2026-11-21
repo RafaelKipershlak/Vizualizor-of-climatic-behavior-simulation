@@ -1,6 +1,7 @@
 #include "VulkanBuffer.h"
 #include <iostream>
 #include <stdexcept>
+#include <cstring>
 
 static VkBufferUsageFlags getVulkanUsage(BufferType type) {
 	switch (type) {

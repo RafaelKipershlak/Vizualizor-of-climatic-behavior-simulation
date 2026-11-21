@@ -1,11 +1,7 @@
 #pragma once
-#include <iostream>
 #include <vulkan/vulkan.h>
-#include <vector>
-#include <chrono>
-#include <fstream>
-#include <stdexcept>
 #include <GLFW/glfw3.h>
+#include <vector>
 
 class VulkanSurface
 {

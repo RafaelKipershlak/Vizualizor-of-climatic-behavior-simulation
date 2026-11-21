@@ -1,4 +1,7 @@
 #include "Swapchain.h"
+#include "VulkanSurface.h"
+#include <iostream>
+#include <stdexcept>
 
 Swapchain::Swapchain(const VulkanSurface& vkSurface, VkDevice device) : device(device)
 {

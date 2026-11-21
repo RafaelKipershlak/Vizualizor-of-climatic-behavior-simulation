@@ -1,12 +1,9 @@
 #pragma once
-#include <iostream>
-#include <vulkan/vulkan.h>
+#include <cstdint>
 #include <vector>
-#include <chrono>
-#include <fstream>
-#include <stdexcept>
-#include <GLFW/glfw3.h>
-#include "VulkanSurface.h"
+#include <vulkan/vulkan.h>
+
+class VulkanSurface; // Forward declaration (replaces #include "VulkanSurface.h")
 
 class Swapchain
 {

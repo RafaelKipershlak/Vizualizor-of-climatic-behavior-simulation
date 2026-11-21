@@ -1,5 +1,4 @@
 #pragma once
-#include <string>
 #include <vulkan/vulkan.h>
 #include <cstdint> // For uint32_t
 #include <vector>

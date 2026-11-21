@@ -1,5 +1,9 @@
 #include "ComputeShaders.h"
-
+#include "VulkanBuffer.h" // Keep if ComputeShaders.h only forward-declares VulkanBuffer
+#include <fstream>
+#include <iostream>
+#include <stdexcept>
+#include <vector>
 
 std::vector<char> readFile(const std::string& filename)
 {

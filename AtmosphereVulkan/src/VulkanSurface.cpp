@@ -1,6 +1,7 @@
 #include "VulkanSurface.h"
 #include <algorithm>
 #include <cstdint>
+#include <iostream>
 
 VkPresentModeKHR VulkanSurface::choosePresentMode(const std::vector<VkPresentModeKHR>& presentModes)
 {
