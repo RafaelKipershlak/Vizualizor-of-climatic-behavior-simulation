@@ -92,6 +92,12 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
 
     std::vector<VkVertexInputAttributeDescription> attributes = { attribute };
 
+    GraphicsPipelineConfig meshConfig{};
+
+    meshConfig.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; // means every three vertices form a triangle.
+    meshConfig.depthWriteEnable = VK_TRUE; // means depth values are written.
+    meshConfig.blendingEnable = VK_FALSE; // means blending is disabled.
+
     GraphicsPipeline pipeline(
         device,
         surface.getFormat().format,
@@ -101,7 +107,8 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
         "shaders/cube.vert.spv",
         "shaders/cube.frag.spv",
         depthResourses.getFormat(),
-        cameraDescriptorSetLayout
+        cameraDescriptorSetLayout,
+        meshConfig
     );
     
     // create a renering depth attachment

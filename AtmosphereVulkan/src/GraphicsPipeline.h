@@ -3,6 +3,15 @@
 #include <vector>
 #include <string>
 
+struct GraphicsPipelineConfig
+{
+    VkPrimitiveTopology topology;
+
+    VkBool32 depthWriteEnable;
+
+    VkBool32 blendingEnable;
+};
+
 class GraphicsPipeline
 {
     public:
@@ -15,7 +24,8 @@ class GraphicsPipeline
             const std::string& vertFile,
             const std::string& fragFile,
             VkFormat depthFormat, // Default value added here
-            VkDescriptorSetLayout cameraDescriptorSetLayout
+            VkDescriptorSetLayout cameraDescriptorSetLayout,
+            const GraphicsPipelineConfig& config
         );
 
         ~GraphicsPipeline();

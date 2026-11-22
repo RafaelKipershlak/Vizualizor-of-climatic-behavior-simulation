@@ -30,7 +30,8 @@ GraphicsPipeline::GraphicsPipeline(VkDevice device, VkFormat colorFormat, VkExte
     const std::string& vertFile,
     const std::string& fragFile,
     VkFormat depthFormat,
-    VkDescriptorSetLayout cameraDescriptorSetLayout
+    VkDescriptorSetLayout cameraDescriptorSetLayout,
+    const GraphicsPipelineConfig& config
 ) : device(device)
 {
     //==========================================================
@@ -41,8 +42,8 @@ GraphicsPipeline::GraphicsPipeline(VkDevice device, VkFormat colorFormat, VkExte
 
         depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 
-        depthStencil.depthTestEnable = VK_TRUE; // This tells Vulkan to perform a depth comparison for fragments.
-        depthStencil.depthWriteEnable = VK_TRUE; // When a fragment passes the depth test, its depth value can be written into the depth image.
+        depthStencil.depthTestEnable = config.depthWriteEnable; // This tells Vulkan to perform a depth comparison for fragments.
+        depthStencil.depthWriteEnable = config.topology; // When a fragment passes the depth test, its depth value can be written into the depth image.
         depthStencil.depthCompareOp = VK_COMPARE_OP_LESS; // If the new fragment's depth is smaller than the depth already stored in the image, the fragment passes.
 
         depthStencil.depthBoundsTestEnable = VK_FALSE;
@@ -214,7 +215,7 @@ GraphicsPipeline::GraphicsPipeline(VkDevice device, VkFormat colorFormat, VkExte
 
     VkPipelineColorBlendAttachmentState colorBlendAttachment{};
 
-    colorBlendAttachment.blendEnable = VK_FALSE; // Don't blend with the existing color.
+    colorBlendAttachment.blendEnable = config.blendingEnable; // Don't blend with the existing color.
     colorBlendAttachment.colorWriteMask =
         VK_COLOR_COMPONENT_R_BIT |
         VK_COLOR_COMPONENT_G_BIT |
