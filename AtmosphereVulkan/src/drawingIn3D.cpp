@@ -16,7 +16,7 @@
 #include "FrameSync.h"
 #include <GLFW/glfw3.h>
 #include "DepthResources.h"
-
+#include "Camera.h"
 
 static int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -224,35 +224,7 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
     uint32_t imageIndex = 0;
     bool depthInitialized = false;
 
-    float angleX = 0.0f;
-    float angleY = 0.0f;
-
-    float fovDegrees = 60.0f;
-    float fovRadians = fovDegrees * (3.14159265358979323846f / 180.0f);
-    float f = 1.0f / std::tan(fovRadians / 2.0f);
-    float aspect = static_cast<float>(surface.getExtent().width) / static_cast<float>(surface.getExtent().height);
-    float farPlane = 100.0f;
-    float nearPlane = 0.1f;
-
-    float cameraYawDegrees = 0;
-    float cameraYaw = cameraYawDegrees * (3.14159265358979323846f / 180.0f);
-    float c = std::cos(cameraYaw);
-    float s = std::sin(cameraYaw);
-
-    float cameraPitchDegrees = 0.0f; // 1. Add pitch tracking
-    float pitch = cameraPitchDegrees * (3.14159265358979323846f / 180.0f);
-    float cp = std::cos(pitch);
-    float sp = std::sin(pitch);
-
-    double lastMouseX = 0.0;
-    double lastMouseY = 0.0;
-
-    bool firstMouse = true;
-
-    float mouseSensitivity = 0.1f;
-
-    float cameraPosForward = -5.0f;
-    float cameraPosRight = 0.0f;
+    Camera camera(surface.getExtent().width, surface.getExtent().height);
 
     //keep the window open
     while (!glfwWindowShouldClose(window))
@@ -347,46 +319,31 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
 
             glfwGetCursorPos(window, &mouseX, &mouseY);
 
-            if (firstMouse)
-            {
-                lastMouseX = mouseX;
-                lastMouseY = mouseY;
-                firstMouse = false;
-            }
-
-            double deltaX = mouseX - lastMouseX;
-            double deltaY = mouseY - lastMouseY;
-
-            lastMouseX = mouseX;
-            lastMouseY = mouseY;
-
-            // Update camera angles
-            cameraYawDegrees -= static_cast<float>(deltaX) * mouseSensitivity;
-            cameraPitchDegrees += static_cast<float>(deltaY) * mouseSensitivity;
+            camera.updateCameraYaw(mouseX, mouseY);
         }
         else
         {
-            firstMouse = true;
+            camera.setFirstMouse(true);
         }
         
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
         {
-            cameraPosRight += 0.1f;
+            camera.updateHorizontalPosition(0.1f);
         }
 
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         {
-            cameraPosRight -= 0.1f;
+            camera.updateHorizontalPosition(-0.1f);
         }
 
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         {
-            cameraPosForward += 0.1f; // move forward
+            camera.updateVerticalPosition(0.1f); // move forward
         }
 
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
         {
-            cameraPosForward -= 0.1f; // move backwards
+            camera.updateVerticalPosition(-0.1f); // move backwards
         }
 
         // Clamp pitch so the camera doesn't flip upside down past the poles
@@ -452,31 +409,16 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
                 VK_INDEX_TYPE_UINT32
             );
 
-            cameraYaw = cameraYawDegrees * (3.14159265358979323846f / 180.0f);
-            c = std::cos(cameraYaw);
-            s = std::sin(cameraYaw);
-
-            pitch = cameraPitchDegrees * (3.14159265358979323846f / 180.0f);
-            cp = std::cos(pitch);
-            sp = std::sin(pitch);
+            camera.updateCameraYaw();
+            camera.updateCameraPitch();
 
             // 2. Initialize the struct using proper C++ curly braces {}
             PushConstants pushConstants = {
-                angleX,
-                angleY,
-                {0,0},
-                {
-                    { f / aspect,  0.0f,  0.0f,                                             0.0f },
-                    { 0.0f,        -f,     0.0f,                                             0.0f },
-                    { 0.0f,        0.0f,  farPlane / (nearPlane - farPlane),                -1.0f },
-                    { 0.0f,        0.0f,  (farPlane * nearPlane) / (nearPlane - farPlane),  0.0f }
-                },
-                {
-                    { c,        s*sp,   s*cp,               0.0f },
-                    { 0.0f,     cp,     -sp,                0.0f },
-                    { -s,       c*sp,   c*cp,               0.0f }, 
-                    { cameraPosRight,     0.0f,   cameraPosForward,   1.0f }
-                }
+                camera.getAngleX(),
+                camera.getAngleY(),
+                { 0.0f, 0.0f },
+                camera.getProjectionMatrix(),
+                camera.getViewMatrix()
             };
 
             vkCmdPushConstants(

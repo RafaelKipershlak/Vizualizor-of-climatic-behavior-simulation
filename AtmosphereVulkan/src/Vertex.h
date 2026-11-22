@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vulkan/vulkan.h>
+#include "Camera.h"
 
 struct Vertex
 {
@@ -27,11 +28,11 @@ struct PushConstants
     float angleX;
     float angleY;
 
-    float padding[2];      // Offsets 8 and 12
+    std::array<float, 2> padding; // Offsets 8 and 12
 
     // C++ automatically adds 8 bytes of padding here for 16-byte alignment of mat4
-    float projectionData[4][4]; // Fixed-size raw array of 16 floats
-    float viweData[4][4]; // Fixed-size raw array of 16 floats
+    Camera::Mat4 projection;
+    Camera::Mat4 view;
 
 };
 
