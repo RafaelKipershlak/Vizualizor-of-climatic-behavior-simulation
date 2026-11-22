@@ -2,9 +2,6 @@
 
 Camera::Camera(uint32_t surfaceWidth, uint32_t surfaceHeight)
 {
-    angleX = 0.0f;
-    angleY = 0.0f;
-
     fovDegrees = 60.0f;
     fovRadians = fovDegrees * (3.14159265358979323846f / 180.0f);
     f = 1.0f / std::tan(fovRadians / 2.0f);

@@ -14,7 +14,8 @@ class GraphicsPipeline
             const std::vector<VkVertexInputAttributeDescription>& attributes,
             const std::string& vertFile,
             const std::string& fragFile,
-            VkFormat depthFormat = VK_FORMAT_UNDEFINED // Default value added here
+            VkFormat depthFormat, // Default value added here
+            VkDescriptorSetLayout cameraDescriptorSetLayout
         );
 
         ~GraphicsPipeline();
@@ -23,6 +24,8 @@ class GraphicsPipeline
 
         VkPipeline getPipeline() const;
         VkPipelineLayout getPipelineLayout() const { return pipelineLayout; };
+
+        void destroy();
 
     private:
         VkDevice device = VK_NULL_HANDLE;

@@ -15,8 +15,6 @@ public:
 	bool getFirstMouse() const { return firstMouse; };
 	double getLastMouseX() const { return lastMouseX; };
 	double getLastMouseY() const { return lastMouseY; };
-	float getAngleX() const { return angleX; };
-	float getAngleY() const { return angleY; };
 
 	void setFirstMouse(bool newFirstMouse) { firstMouse = newFirstMouse; };
 	void setLastMouseX(double newMouseX) { lastMouseX = newMouseX; };
@@ -51,8 +49,6 @@ public:
 	void updateAspectRatio(uint32_t width, uint32_t height);
 
 private:
-	float angleX;
-	float angleY;
 	float fovDegrees;
 	float fovRadians;
 	float f;

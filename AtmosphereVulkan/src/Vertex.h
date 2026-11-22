@@ -23,19 +23,20 @@ struct VertexCube
     float z;
 };
 
-struct PushConstants
+struct CameraUniform
 {
-    float angleX;
-    float angleY;
-
-    std::array<float, 2> padding; // Offsets 8 and 12
-
-    // C++ automatically adds 8 bytes of padding here for 16-byte alignment of mat4
     Camera::Mat4 projection;
     Camera::Mat4 view;
-
 };
 
+static_assert(sizeof(CameraUniform) == 128);
+
+struct PushConstants
+{
+    Camera::Mat4 model;
+};
+
+static_assert(sizeof(PushConstants) == 64);
 
 // =========================================================================
 // 1. EarthVertex (3D Globe Mesh)

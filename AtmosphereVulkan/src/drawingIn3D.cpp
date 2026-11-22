@@ -44,6 +44,35 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
     // 3. Create depth resources
     DepthResources depthResourses(physicalDevice, device, extend);
 
+    VkDescriptorSetLayoutBinding cameraBinding{};
+
+    cameraBinding.binding = 0;
+    cameraBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    cameraBinding.descriptorCount = 1;
+    cameraBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    cameraBinding.pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo cameraLayoutInfo{};
+
+    cameraLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+
+    cameraLayoutInfo.bindingCount = 1;
+    cameraLayoutInfo.pBindings = &cameraBinding;
+
+    VkDescriptorSetLayout cameraDescriptorSetLayout = VK_NULL_HANDLE;
+
+    VkResult result = vkCreateDescriptorSetLayout(
+        device,
+        &cameraLayoutInfo,
+        nullptr,
+        &cameraDescriptorSetLayout
+    );
+
+    if (result != VK_SUCCESS)
+    {
+        throw std::runtime_error("Failed to create camera descriptor set layout!");
+    }
+
     // 4. Create graphics pipeline
 
     //Vertex binding description, this Tells Vulkan how our vertices are arranged in memory.
@@ -63,8 +92,18 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
 
     std::vector<VkVertexInputAttributeDescription> attributes = { attribute };
 
-    GraphicsPipeline pipeline(device, surface.getFormat().format, extend, bindings, attributes, "shaders/cube.vert.spv", "shaders/cube.frag.spv", depthResourses.getFormat());
-
+    GraphicsPipeline pipeline(
+        device,
+        surface.getFormat().format,
+        extend,
+        bindings,
+        attributes,
+        "shaders/cube.vert.spv",
+        "shaders/cube.frag.spv",
+        depthResourses.getFormat(),
+        cameraDescriptorSetLayout
+    );
+    
     // create a renering depth attachment
     VkRenderingAttachmentInfo depthAttachment{};
     depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
@@ -119,6 +158,13 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
         6, 2, 3
     };
 
+    Camera::Mat4 model = { {
+        {{1.0f, 0.0f, 0.0f, 0.0f}},
+        {{0.0f, 1.0f, 0.0f, 0.0f}},
+        {{0.0f, 0.0f, 1.0f, 0.0f}},
+        {{0.0f, 0.0f, 0.0f, 1.0f}}
+    } };
+
     VkDeviceSize vBufferSize = sizeof(VertexCube) * vertices.size();
 
     VulkanBuffer vStagingBuffer(
@@ -158,6 +204,75 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
         iBufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
         MemoryType::GpuOnly
+    );
+
+    VulkanBuffer cameraBuffer(
+        device,
+        physicalDevice,
+        sizeof(CameraUniform),
+        BufferType::Uniform,
+        MemoryType::CpuToGpu
+    );
+
+    VkDescriptorPoolSize poolSize{};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = 1;
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.maxSets = 1;
+
+    VkDescriptorPool cameraDescriptorPool = VK_NULL_HANDLE;
+
+    result = vkCreateDescriptorPool(
+        device,
+        &poolInfo,
+        nullptr,
+        &cameraDescriptorPool
+    );
+
+    if (result != VK_SUCCESS)
+        throw std::runtime_error("Failed to create camera descriptor pool!");
+
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = cameraDescriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &cameraDescriptorSetLayout;
+
+    VkDescriptorSet cameraDescriptorSet = VK_NULL_HANDLE;
+
+    result = vkAllocateDescriptorSets(
+        device,
+        &allocInfo,
+        &cameraDescriptorSet
+    );
+
+    if (result != VK_SUCCESS)
+        throw std::runtime_error("Failed to allocate camera descriptor set!");
+
+    VkDescriptorBufferInfo bufferInfo{};
+    bufferInfo.buffer = cameraBuffer.getBuffer();
+    bufferInfo.offset = 0;
+    bufferInfo.range = sizeof(CameraUniform);
+
+    VkWriteDescriptorSet descriptorWrite{};
+    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrite.dstSet = cameraDescriptorSet;
+    descriptorWrite.dstBinding = 0;
+    descriptorWrite.dstArrayElement = 0;
+    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorWrite.descriptorCount = 1;
+    descriptorWrite.pBufferInfo = &bufferInfo;
+
+    vkUpdateDescriptorSets(
+        device,
+        1,
+        &descriptorWrite,
+        0,
+        nullptr
     );
 
     for (size_t i = 0; i < vkSetup->getCommandBuffersCount(); i++)
@@ -346,13 +461,16 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
             camera.updateVerticalPosition(-0.1f); // move backwards
         }
 
-        // Clamp pitch so the camera doesn't flip upside down past the poles
-        //if (cameraPitchDegrees > 89.0f)  cameraPitchDegrees = 89.0f;
-        //if (cameraPitchDegrees < -89.0f) cameraPitchDegrees = -89.0f;
-        
+       
+        // Gets the latest projection and view matrices from your camera. 
+        // And Copies both matrices into the uniform buffer. we do that after input processing b
+        // because we want the matrices to reflect the camera's latest position and orientation for this frame.
+        CameraUniform cameraUniform{
+            camera.getProjectionMatrix(),
+            camera.getViewMatrix()
+        };
 
-
-        //cameraYawDegrees += 0.1f;
+        cameraBuffer.copyTo(&cameraUniform, sizeof(CameraUniform));
 
         // render the image
         if (vkSetup->StartRecording(currentFrame))
@@ -390,6 +508,18 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
             // Tell Vulkan which graphics pipeline to use for subsequent draw commands.
             pipeline.bind(commandBuffer);
 
+            // our shaders expext layout(set = 0, binding = 0) uniform CameraData
+            vkCmdBindDescriptorSets(
+                commandBuffer,
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                pipeline.getPipelineLayout(),
+                0,                          // First descriptor set
+                1,                          // Number of descriptor sets
+                &cameraDescriptorSet,
+                0,                          // Dynamic offset count
+                nullptr
+            );
+
             //Tell Vulkan where to retrieve vertex data.
             VkBuffer vertexBufferHandle = verticesBuffer.getBuffer();
             VkDeviceSize vertexOffset = 0;
@@ -414,16 +544,12 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
 
             // 2. Initialize the struct using proper C++ curly braces {}
             PushConstants pushConstants = {
-                camera.getAngleX(),
-                camera.getAngleY(),
-                { 0.0f, 0.0f },
-                camera.getProjectionMatrix(),
-                camera.getViewMatrix()
+                model
             };
 
             vkCmdPushConstants(
                 commandBuffer,
-                pipeline.getPipelineLayout(),  // We need a getter for the pipeline layout
+                pipeline.getPipelineLayout(),
                 VK_SHADER_STAGE_VERTEX_BIT,
                 0,
                 sizeof(PushConstants),
@@ -492,6 +618,33 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
     }
     // Ensure the GPU is completely idle before local resources start destroying
     vkDeviceWaitIdle(device);
+
+    // 1. Destroy graphics pipeline and pipeline layout
+    pipeline.destroy();
+
+    // 2. Destroy descriptor pool (also frees cameraDescriptorSet)
+    if (cameraDescriptorPool != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorPool(
+            device,
+            cameraDescriptorPool,
+            nullptr
+        );
+
+        cameraDescriptorPool = VK_NULL_HANDLE;
+    }
+
+    // 3. Destroy descriptor set layout
+    if (cameraDescriptorSetLayout != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorSetLayout(
+            device,
+            cameraDescriptorSetLayout,
+            nullptr
+        );
+
+        cameraDescriptorSetLayout = VK_NULL_HANDLE;
+    }
 }
 
 int drawCube()

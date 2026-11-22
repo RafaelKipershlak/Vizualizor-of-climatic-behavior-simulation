@@ -29,7 +29,8 @@ GraphicsPipeline::GraphicsPipeline(VkDevice device, VkFormat colorFormat, VkExte
     const std::vector<VkVertexInputAttributeDescription>& attributes,
     const std::string& vertFile,
     const std::string& fragFile,
-    VkFormat depthFormat
+    VkFormat depthFormat,
+    VkDescriptorSetLayout cameraDescriptorSetLayout
 ) : device(device)
 {
     //==========================================================
@@ -245,8 +246,9 @@ GraphicsPipeline::GraphicsPipeline(VkDevice device, VkFormat colorFormat, VkExte
     pipelineLayoutInfo.sType =
         VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 
-    pipelineLayoutInfo.setLayoutCount = 0;
-    pipelineLayoutInfo.pSetLayouts = nullptr;
+    // We now have one descriptor set layout.
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &cameraDescriptorSetLayout;
 
     pipelineLayoutInfo.pushConstantRangeCount = 1;
     pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
@@ -327,15 +329,7 @@ GraphicsPipeline::GraphicsPipeline(VkDevice device, VkFormat colorFormat, VkExte
 
 GraphicsPipeline::~GraphicsPipeline()
 {
-    if (pipeline != VK_NULL_HANDLE)
-    {
-        vkDestroyPipeline(device, pipeline, nullptr);
-    }
-
-    if (pipelineLayout != VK_NULL_HANDLE)
-    {
-        vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-    }
+    destroy();
 }
 
 void GraphicsPipeline::bind(VkCommandBuffer commandBuffer) const
@@ -345,4 +339,19 @@ void GraphicsPipeline::bind(VkCommandBuffer commandBuffer) const
         VK_PIPELINE_BIND_POINT_GRAPHICS,
         pipeline
     );
+}
+
+void GraphicsPipeline::destroy()
+{
+    if (pipeline != VK_NULL_HANDLE)
+    {
+        vkDestroyPipeline(device, pipeline, nullptr);
+        pipeline = VK_NULL_HANDLE;
+    }
+
+    if (pipelineLayout != VK_NULL_HANDLE)
+    {
+        vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+        pipelineLayout = VK_NULL_HANDLE;
+    }
 }
