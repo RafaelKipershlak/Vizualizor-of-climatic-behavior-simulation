@@ -18,6 +18,71 @@
 #include "DepthResources.h"
 #include "Camera.h"
 
+std::vector<VertexSphere> generateSphereVertices(
+    uint32_t slices,
+    uint32_t stacks,
+    float radius)
+{
+    std::vector<VertexSphere> vertices;
+
+    const float PI = 3.14159265359f;
+
+    for (uint32_t i = 0; i <= stacks; i++)
+    {
+        float phi = PI * static_cast<float>(i) / stacks;
+
+        for (uint32_t j = 0; j <= slices; j++)
+        {
+            float theta = 2.0f * PI * static_cast<float>(j) / slices;
+
+            VertexSphere vertex{};
+
+            vertex.x = radius * std::sin(phi) * std::cos(theta);
+            vertex.y = radius * std::cos(phi);
+            vertex.z = radius * std::sin(phi) * std::sin(theta);
+
+            vertex.nx = vertex.x / radius;
+            vertex.ny = vertex.y / radius;
+            vertex.nz = vertex.z / radius;
+
+            vertices.push_back(vertex);
+        }
+    }
+
+    return vertices;
+}
+
+std::vector<uint32_t> generateSphereIndices(
+    uint32_t slices,
+    uint32_t stacks)
+{
+    std::vector<uint32_t> indices;
+
+    for (uint32_t i = 0; i < stacks; i++)
+    {
+        for (uint32_t j = 0; j < slices; j++)
+        {
+            uint32_t topLeft = i * (slices + 1) + j;
+            uint32_t bottomLeft = (i + 1) * (slices + 1) + j;
+
+            uint32_t topRight = topLeft + 1;
+            uint32_t bottomRight = bottomLeft + 1;
+
+            // First triangle
+            indices.push_back(topLeft);
+            indices.push_back(bottomLeft);
+            indices.push_back(topRight);
+
+            // Second triangle
+            indices.push_back(topRight);
+            indices.push_back(bottomLeft);
+            indices.push_back(bottomRight);
+        }
+    }
+
+    return indices;
+}
+
 static int MAX_FRAMES_IN_FLIGHT = 2;
 
 void draw(VulkanSetup* vkSetup, GLFWwindow* window)
@@ -78,19 +143,26 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
     //Vertex binding description, this Tells Vulkan how our vertices are arranged in memory.
     VkVertexInputBindingDescription binding{};
     binding.binding = 0;
-    binding.stride = sizeof(VertexCube);
+    binding.stride = sizeof(VertexSphere);
     binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
     std::vector<VkVertexInputBindingDescription> bindings = { binding };
 
     //Vertex attribute description, Tells Vulkan which part of each vertex represents the position.
-    VkVertexInputAttributeDescription attribute{};
-    attribute.binding = 0;
-    attribute.format = VK_FORMAT_R32G32B32_SFLOAT; //Three 32-bit floating-point values (X, Y, Z).
-    attribute.location = 0; // Corresponds to shader input location 0.
-    attribute.offset = 0; // Position starts at the beginning of our structure.
+    std::vector<VkVertexInputAttributeDescription> attributes(2);
 
-    std::vector<VkVertexInputAttributeDescription> attributes = { attribute };
+    attributes[0].binding = 0;
+    attributes[0].location = 0; // Corresponds to shader input location 0.
+    attributes[0].format = VK_FORMAT_R32G32B32_SFLOAT; //Three 32-bit floating-point values (X, Y, Z).
+    attributes[0].offset = offsetof(VertexSphere, x); // Position starts at the beginning of our structure.
+
+    attributes[1].binding = 0;
+    attributes[1].location = 1;
+    attributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributes[1].offset = offsetof(VertexSphere, nx);
+
+
+    //std::vector<VkVertexInputAttributeDescription> attributes = { attribute };
 
     GraphicsPipelineConfig meshConfig{};
 
@@ -104,8 +176,8 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
         extend,
         bindings,
         attributes,
-        "shaders/cube.vert.spv",
-        "shaders/cube.frag.spv",
+        "shaders/sphere.vert.spv",
+        "shaders/sphere.frag.spv",
         depthResourses.getFormat(),
         cameraDescriptorSetLayout,
         meshConfig
@@ -125,6 +197,7 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
 
     // creating buffers
 
+    /*
     std::vector<VertexCube> vertices =
     {
         {-1.0f, -1.0f, -1.0f}, // 0
@@ -164,6 +237,15 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
         3, 7, 6,
         6, 2, 3
     };
+    */
+
+    const uint32_t slices = 32;
+    const uint32_t stacks = 16;
+    const float radius = 1.0f;
+
+    std::vector<VertexSphere> vertices = generateSphereVertices(slices, stacks, radius);
+
+    std::vector<uint32_t> indices = generateSphereIndices(slices, stacks);
 
     Camera::Mat4 model = { {
         {{1.0f, 0.0f, 0.0f, 0.0f}},
@@ -172,7 +254,7 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
         {{0.0f, 0.0f, 0.0f, 1.0f}}
     } };
 
-    VkDeviceSize vBufferSize = sizeof(VertexCube) * vertices.size();
+    VkDeviceSize vBufferSize = sizeof(VertexSphere) * vertices.size();
 
     VulkanBuffer vStagingBuffer(
         device,

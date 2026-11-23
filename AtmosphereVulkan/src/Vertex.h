@@ -23,6 +23,12 @@ struct VertexCube
     float z;
 };
 
+struct VertexSphere
+{
+    float x, y, z;
+    float nx, ny, nz;
+};
+
 struct CameraUniform
 {
     Camera::Mat4 projection;
