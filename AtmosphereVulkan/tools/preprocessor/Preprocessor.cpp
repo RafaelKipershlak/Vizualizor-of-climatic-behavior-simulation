@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <random>
 #include <sstream>
 #include <string>
@@ -20,21 +21,37 @@ constexpr float PI = 3.14159265358979323846f;
 // =========================================================================
 // Binary Contract — Matches Vertex.h byte-for-byte (std430 aligned)
 // =========================================================================
-struct alignas(16) Particle {
-    float posTemp[4];   // x, y, z, temperature
-    float velHumid[4];  // vx, vy, vz, humidity (q)
-};
-static_assert(sizeof(Particle) == 32, "Particle must be exactly 32 bytes.");
-
 struct FrameHeader {
-    uint32_t magic = 0x434C494D; // "CLIM"
+    uint32_t magicNumber = 0x434C494D; // "CLIM"
     uint32_t version = 1;
-    uint32_t particleCount = 0;
-    uint32_t flags = 0;
-    double   timestamp = 0.0;
-    uint64_t reserved = 0;
+    uint64_t timestampUnix = 0;        // Simulation timestamp (seconds)
+    uint32_t particleCount = 0;        // Up to 5,000,000+
+    uint32_t gridCellCount = 0;        // Spatial partition cells
+    float    minTemp = 0.0f;           // Dataset metadata for UI normalization
+    float    maxTemp = 0.0f;
+    uint32_t reserved[4]{};            // Pads header to 48 bytes (multiple of 16)
 };
-static_assert(sizeof(FrameHeader) == 32, "FrameHeader must be exactly 32 bytes.");
+static_assert(sizeof(FrameHeader) == 48, "FrameHeader must be 48 bytes to keep Particle[0] 16-byte aligned.");
+
+struct alignas(16) Particle {
+    float    position[3];       // Offset 0  (12 bytes): Cartesian (x, y, z)
+    float    temperature;       // Offset 12 ( 4 bytes): Temperature
+    float    velocity[3];       // Offset 16 (12 bytes): Wind vector (vx, vy, vz)
+    uint32_t packedAttributes;  // Offset 28 ( 4 bytes): [Humidity(8b), CloudWater(8b), LatentHeat(8b), PhaseFlags(8b)]
+};
+static_assert(sizeof(Particle) == 32, "Particle must be strictly 32 bytes for std430 alignment.");
+
+// Pack 4 normalized atmospheric attributes into 1 uint32_t (4 bytes)
+static uint32_t packAttributes(float humidityNorm, float cloudWaterNorm,
+                               float latentHeatNorm, uint8_t phaseFlags) {
+    auto toByte = [](float v) -> uint32_t {
+        return static_cast<uint32_t>(std::round(std::clamp(v, 0.0f, 1.0f) * 255.0f));
+    };
+    return (toByte(humidityNorm)   << 0)  |
+           (toByte(cloudWaterNorm) << 8)  |
+           (toByte(latentHeatNorm) << 16) |
+           (static_cast<uint32_t>(phaseFlags) << 24);
+}
 
 // =========================================================================
 // Advisor Coordinate System Helpers
@@ -78,19 +95,18 @@ struct SyntheticParticle {
 };
 
 struct ClimateSample {
-    Vec3  pos;
-    Vec3  vel;
-    float T;
-    float q;
+    Vec3     pos;
+    Vec3     vel;
+    float    T;
+    float    q;
+    uint32_t packed;
 };
 
 static ClimateSample evaluateClimateField(const SyntheticParticle& sp, float R, float H, float time) {
     float hNorm = std::clamp((sp.r - R) / H, 0.0f, 1.0f);
     float absLat = std::abs(sp.lat);
-    float hemiSign = (sp.lat >= 0.0f) ? 1.0f : -1.0f;
 
     // 1. 3-Cell Overturning (Hadley: 0-30°, Ferrel: 30-60°, Polar: 60-90°)
-    // sin(6 * lat) flips sign at 30° and 60°
     float cellPhase = 6.0f * sp.lat;
     float vMeridional = -1.2f * std::sin(cellPhase) * std::cos(PI * hNorm);
     float vVertical   =  0.6f * std::cos(cellPhase) * std::sin(PI * hNorm);
@@ -98,31 +114,37 @@ static ClimateSample evaluateClimateField(const SyntheticParticle& sp, float R, 
     // 2. Zonal Winds (Trade Winds, Mid-Latitude Westerlies + Jet Stream, Polar Easterlies)
     float vZonal = 0.0f;
     if (absLat < PI / 6.0f) {
-        // Hadley: Easterly Trade Winds near surface, westerly return aloft
         vZonal = -2.0f * std::cos(3.0f * absLat) * (1.0f - 1.5f * hNorm);
     } else if (absLat < PI / 3.0f) {
-        // Ferrel: Strong Westerlies & Jet Stream peak around 45° at mid-upper altitude
         float jet = std::sin(3.0f * (absLat - PI / 6.0f));
         vZonal = (2.2f + 2.8f * std::exp(-std::pow((hNorm - 0.65f) / 0.25f, 2.0f))) * jet;
     } else {
-        // Polar: Polar Easterlies
         vZonal = -1.5f * std::cos(3.0f * (absLat - PI / 3.0f));
     }
 
-    // Add gentle Rossby wave undulation
+    // Rossby wave undulation
     float wave = 0.45f * std::sin(4.0f * sp.lon - 0.15f * time);
     vMeridional += wave * std::cos(sp.lat);
 
-    // 3. Temperature T in advisor range [0.1, 10.0]: warm equator/surface, cold poles/top
+    // 3. Temperature T in advisor range [0.1, 10.0]
     float cosLat = std::cos(sp.lat);
-    float T = 0.4f + 4.2f * (cosLat * cosLat) * std::exp(-1.4f * hNorm) + 0.25f * std::sin(sp.lon - 0.05f * time) * cosLat;
+    float T = 0.4f + 4.2f * (cosLat * cosLat) * std::exp(-1.4f * hNorm)
+            + 0.25f * std::sin(sp.lon - 0.05f * time) * cosLat;
     T = std::clamp(T, 0.1f, 10.0f);
 
-    // 4. Humidity q in advisor range [0.0, 0.1]: high in tropics/ITCZ & lower troposphere
+    // 4. Humidity q in advisor range [0.0, 0.1]
     float itcz = std::exp(-std::pow(sp.lat / 0.35f, 2.0f));
     float stormTrack = 0.6f * std::exp(-std::pow((absLat - 0.85f) / 0.25f, 2.0f));
     float q = 0.09f * std::clamp(itcz + stormTrack, 0.0f, 1.0f) * std::exp(-2.5f * hNorm);
     q = std::clamp(q, 0.0f, 0.1f);
+
+    // Derive packed attributes: Humidity, CloudWater, LatentHeat, PhaseFlags
+    float humidNorm  = q / 0.1f;
+    float cloudNorm  = (humidNorm > 0.55f && hNorm > 0.15f && hNorm < 0.65f) ? (humidNorm - 0.55f) / 0.45f : 0.0f;
+    float latentNorm = std::clamp(cloudNorm * std::max(0.0f, vVertical), 0.0f, 1.0f);
+    uint8_t phaseFlags = 0;
+    if (cloudNorm > 0.1f)  phaseFlags |= (1u << 0); // Bit 0: Condensation / Cloud
+    if (cloudNorm > 0.65f) phaseFlags |= (1u << 1); // Bit 1: Precipitation
 
     // Convert spherical basis vectors (e_r, e_lat, e_lon) to Cartesian velocity
     float sinLat = std::sin(sp.lat);
@@ -139,7 +161,13 @@ static ClimateSample evaluateClimateField(const SyntheticParticle& sp, float R, 
         vVertical * e_r.z + vMeridional * e_lat.z + vZonal * e_lon.z
     };
 
-    return { sphericalToCartesian(sp.r, sp.lat, sp.lon), vel, T, q };
+    return {
+        sphericalToCartesian(sp.r, sp.lat, sp.lon),
+        vel,
+        T,
+        q,
+        packAttributes(humidNorm, cloudNorm, latentNorm, phaseFlags)
+    };
 }
 
 static void initSyntheticParticles(std::vector<SyntheticParticle>& list, uint32_t count, float R, float H) {
@@ -186,9 +214,24 @@ static bool writeBinaryFrame(const fs::path& filepath, double timestamp, const s
         std::cerr << "Error: Cannot write " << filepath << "\n";
         return false;
     }
+
+    float minT = std::numeric_limits<float>::max();
+    float maxT = std::numeric_limits<float>::lowest();
+    for (const auto& p : particles) {
+        minT = std::min(minT, p.temperature);
+        maxT = std::max(maxT, p.temperature);
+    }
+    if (particles.empty()) {
+        minT = 0.0f;
+        maxT = 0.0f;
+    }
+
     FrameHeader header{};
+    header.timestampUnix = static_cast<uint64_t>(std::max(0.0, timestamp));
     header.particleCount = static_cast<uint32_t>(particles.size());
-    header.timestamp = timestamp;
+    header.gridCellCount = 0;
+    header.minTemp = minT;
+    header.maxTemp = maxT;
 
     ofs.write(reinterpret_cast<const char*>(&header), sizeof(FrameHeader));
     ofs.write(reinterpret_cast<const char*>(particles.data()), particles.size() * sizeof(Particle));
@@ -200,7 +243,7 @@ static bool writeBinaryFrame(const fs::path& filepath, double timestamp, const s
 // =========================================================================
 static int runGenerateBin(const fs::path& outDir, uint32_t numParticles, uint32_t numFrames) {
     fs::create_directories(outDir);
-    const float R = 30.0f, H = 40.0f, dt = 0.5f;
+    const float R = 30.0f, H = 40.0f, dt = 1.0f;
 
     std::vector<SyntheticParticle> state;
     initSyntheticParticles(state, numParticles, R, H);
@@ -212,14 +255,14 @@ static int runGenerateBin(const fs::path& outDir, uint32_t numParticles, uint32_
         float time = f * dt;
         for (uint32_t i = 0; i < numParticles; ++i) {
             samples[i] = evaluateClimateField(state[i], R, H, time);
-            gpuParticles[i].posTemp[0]  = samples[i].pos.x;
-            gpuParticles[i].posTemp[1]  = samples[i].pos.y;
-            gpuParticles[i].posTemp[2]  = samples[i].pos.z;
-            gpuParticles[i].posTemp[3]  = samples[i].T;
-            gpuParticles[i].velHumid[0] = samples[i].vel.x;
-            gpuParticles[i].velHumid[1] = samples[i].vel.y;
-            gpuParticles[i].velHumid[2] = samples[i].vel.z;
-            gpuParticles[i].velHumid[3] = samples[i].q;
+            gpuParticles[i].position[0]      = samples[i].pos.x;
+            gpuParticles[i].position[1]      = samples[i].pos.y;
+            gpuParticles[i].position[2]      = samples[i].pos.z;
+            gpuParticles[i].temperature      = samples[i].T;
+            gpuParticles[i].velocity[0]      = samples[i].vel.x;
+            gpuParticles[i].velocity[1]      = samples[i].vel.y;
+            gpuParticles[i].velocity[2]      = samples[i].vel.z;
+            gpuParticles[i].packedAttributes = samples[i].packed;
         }
 
         fs::path outFile = outDir / formatFrameName("bin", f);
@@ -237,7 +280,7 @@ static int runGenerateBin(const fs::path& outDir, uint32_t numParticles, uint32_
 // =========================================================================
 static int runGenerateJson(const fs::path& outDir, uint32_t numParticles, uint32_t numFrames) {
     fs::create_directories(outDir);
-    const float R = 30.0f, H = 40.0f, dt = 0.5f;
+    const float R = 30.0f, H = 40.0f, dt = 1.0f;
 
     std::vector<SyntheticParticle> state;
     initSyntheticParticles(state, numParticles, R, H);
@@ -310,14 +353,17 @@ static bool loadJsonFrame(const fs::path& filepath, RawJsonFrame& out) {
 
     for (size_t i = 0; i < arr.size(); ++i) {
         const auto& p = arr[i];
-        out.particles[i].posTemp[0]  = p.at("x").get<float>();
-        out.particles[i].posTemp[1]  = p.at("y").get<float>();
-        out.particles[i].posTemp[2]  = p.at("z").get<float>();
-        out.particles[i].posTemp[3]  = p.at("T").get<float>();
-        out.particles[i].velHumid[0] = 0.0f;
-        out.particles[i].velHumid[1] = 0.0f;
-        out.particles[i].velHumid[2] = 0.0f;
-        out.particles[i].velHumid[3] = p.value("q", 0.0f);
+        float q = p.value("q", 0.0f);
+        float humidNorm = std::clamp(q / 0.1f, 0.0f, 1.0f);
+
+        out.particles[i].position[0]      = p.at("x").get<float>();
+        out.particles[i].position[1]      = p.at("y").get<float>();
+        out.particles[i].position[2]      = p.at("z").get<float>();
+        out.particles[i].temperature      = p.at("T").get<float>();
+        out.particles[i].velocity[0]      = 0.0f;
+        out.particles[i].velocity[1]      = 0.0f;
+        out.particles[i].velocity[2]      = 0.0f;
+        out.particles[i].packedAttributes = packAttributes(humidNorm, 0.0f, 0.0f, 0);
     }
     return true;
 }
@@ -347,7 +393,6 @@ static int runConvertJsonToBin(const fs::path& inDir, const fs::path& outDir) {
         return 1;
     }
 
-    // Stream two frames at a time to keep RAM low and compute v = (pos[t+1] - pos[t]) / dt
     for (size_t f = 0; f < jsonFiles.size(); ++f) {
         RawJsonFrame next;
         bool hasNext = (f + 1 < jsonFiles.size());
@@ -359,17 +404,16 @@ static int runConvertJsonToBin(const fs::path& inDir, const fs::path& outDir) {
         if (hasNext && next.particles.size() == curr.particles.size()) {
             float invDt = (next.time > curr.time) ? static_cast<float>(1.0 / (next.time - curr.time)) : 1.0f;
             for (size_t i = 0; i < curr.particles.size(); ++i) {
-                curr.particles[i].velHumid[0] = (next.particles[i].posTemp[0] - curr.particles[i].posTemp[0]) * invDt;
-                curr.particles[i].velHumid[1] = (next.particles[i].posTemp[1] - curr.particles[i].posTemp[1]) * invDt;
-                curr.particles[i].velHumid[2] = (next.particles[i].posTemp[2] - curr.particles[i].posTemp[2]) * invDt;
+                curr.particles[i].velocity[0] = (next.particles[i].position[0] - curr.particles[i].position[0]) * invDt;
+                curr.particles[i].velocity[1] = (next.particles[i].position[1] - curr.particles[i].position[1]) * invDt;
+                curr.particles[i].velocity[2] = (next.particles[i].position[2] - curr.particles[i].position[2]) * invDt;
             }
         } else if (f > 0 && prev.particles.size() == curr.particles.size()) {
-            // Last frame: backward difference
             float invDt = (curr.time > prev.time) ? static_cast<float>(1.0 / (curr.time - prev.time)) : 1.0f;
             for (size_t i = 0; i < curr.particles.size(); ++i) {
-                curr.particles[i].velHumid[0] = (curr.particles[i].posTemp[0] - prev.particles[i].posTemp[0]) * invDt;
-                curr.particles[i].velHumid[1] = (curr.particles[i].posTemp[1] - prev.particles[i].posTemp[1]) * invDt;
-                curr.particles[i].velHumid[2] = (curr.particles[i].posTemp[2] - prev.particles[i].posTemp[2]) * invDt;
+                curr.particles[i].velocity[0] = (curr.particles[i].position[0] - prev.particles[i].position[0]) * invDt;
+                curr.particles[i].velocity[1] = (curr.particles[i].position[1] - prev.particles[i].position[1]) * invDt;
+                curr.particles[i].velocity[2] = (curr.particles[i].position[2] - prev.particles[i].position[2]) * invDt;
             }
         }
 
