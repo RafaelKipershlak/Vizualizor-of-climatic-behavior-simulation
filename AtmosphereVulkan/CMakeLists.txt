@@ -59,6 +59,8 @@ set(PROJECT_SOURCES
     src/Vertex.h
     src/drawingIn3D.cpp
     src/drawingIn3D.h
+    src/Camera.cpp
+    src/Camera.h
 )
 
 add_executable(ClimateVisualizer ${PROJECT_SOURCES})
