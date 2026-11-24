@@ -29,3 +29,6 @@
 **/.vscode/
 **/vscode/
 **/settings.json
+
+# Simulation datasets
+**/data/
