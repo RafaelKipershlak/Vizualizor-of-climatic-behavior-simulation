@@ -81,3 +81,21 @@ target_link_libraries(ClimateVisualizer PRIVATE
 if(WIN32)
     target_compile_definitions(ClimateVisualizer PRIVATE NOMINMAX _CRT_SECURE_NO_WARNINGS)
 endif()
+
+# =========================================================================
+# Task T2: Synthetic Climate Generator & JSON-to-.bin Preprocessor CLI
+# =========================================================================
+FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+)
+FetchContent_MakeAvailable(nlohmann_json)
+
+add_executable(ClimatePreprocessor
+    tools/preprocessor/Preprocessor.cpp
+)
+target_link_libraries(ClimatePreprocessor PRIVATE nlohmann_json::nlohmann_json)
+if(WIN32)
+    target_compile_definitions(ClimatePreprocessor PRIVATE NOMINMAX _CRT_SECURE_NO_WARNINGS)
+endif()
