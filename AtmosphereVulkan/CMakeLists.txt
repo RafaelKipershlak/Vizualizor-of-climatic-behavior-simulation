@@ -61,6 +61,8 @@ set(PROJECT_SOURCES
     src/drawingIn3D.h
     src/Camera.cpp
     src/Camera.h
+    src/Texture.cpp
+    src/Texture.h
 )
 
 add_executable(ClimateVisualizer ${PROJECT_SOURCES})
@@ -69,6 +71,7 @@ add_executable(ClimateVisualizer ${PROJECT_SOURCES})
 target_include_directories(ClimateVisualizer PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/external
     ${Vulkan_INCLUDE_DIRS}
 )
 

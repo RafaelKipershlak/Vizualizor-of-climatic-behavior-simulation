@@ -17,33 +17,44 @@
 #include <GLFW/glfw3.h>
 #include "DepthResources.h"
 #include "Camera.h"
+#include "Texture.h"
+#include <cmath>
 
-std::vector<VertexSphere> generateSphereVertices(
+std::vector<EarthVertex> generateSphereVertices(
     uint32_t slices,
     uint32_t stacks,
     float radius)
 {
-    std::vector<VertexSphere> vertices;
+    std::vector<EarthVertex> vertices;
 
     const float PI = 3.14159265359f;
 
     for (uint32_t i = 0; i <= stacks; i++)
     {
-        float phi = PI * static_cast<float>(i) / stacks;
+        float v = static_cast<float>(i) / static_cast<float>(stacks);
+        float phi = PI * v; // Latitude angle
 
         for (uint32_t j = 0; j <= slices; j++)
         {
-            float theta = 2.0f * PI * static_cast<float>(j) / slices;
+            float u = static_cast<float>(j) / static_cast<float>(slices);
+            float theta = 2.0f * PI * u; // Longitude angle
 
-            VertexSphere vertex{};
+            float nx = std::sin(phi) * std::cos(theta);
+            float ny = std::cos(phi);
+            float nz = std::sin(phi) * std::sin(theta);
 
-            vertex.x = radius * std::sin(phi) * std::cos(theta);
-            vertex.y = radius * std::cos(phi);
-            vertex.z = radius * std::sin(phi) * std::sin(theta);
+            EarthVertex vertex{};
 
-            vertex.nx = vertex.x / radius;
-            vertex.ny = vertex.y / radius;
-            vertex.nz = vertex.z / radius;
+            vertex.pos[0] = radius * nx;
+            vertex.pos[1] = radius * ny;
+            vertex.pos[2] = radius * nz;
+
+            vertex.normal[0] = nx;
+            vertex.normal[1] = ny;
+            vertex.normal[2] = nz;
+
+            vertex.uv[0] = 1.0f -u;
+            vertex.uv[1] = v;
 
             vertices.push_back(vertex);
         }
@@ -109,20 +120,26 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
     // 3. Create depth resources
     DepthResources depthResourses(physicalDevice, device, extend);
 
-    VkDescriptorSetLayoutBinding cameraBinding{};
+    std::array<VkDescriptorSetLayoutBinding, 2> layoutBindings{};
 
-    cameraBinding.binding = 0;
-    cameraBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    cameraBinding.descriptorCount = 1;
-    cameraBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    cameraBinding.pImmutableSamplers = nullptr;
+    // Binding 0: Camera Uniform Buffer (Vertex Shader)
+    layoutBindings[0].binding            = 0;
+    layoutBindings[0].descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    layoutBindings[0].descriptorCount    = 1;
+    layoutBindings[0].stageFlags         = VK_SHADER_STAGE_VERTEX_BIT;
+    layoutBindings[0].pImmutableSamplers = nullptr;
+
+    // Binding 1: Earth Texture Sampler (Fragment Shader)
+    layoutBindings[1].binding            = 1;
+    layoutBindings[1].descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    layoutBindings[1].descriptorCount    = 1;
+    layoutBindings[1].stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
+    layoutBindings[1].pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutCreateInfo cameraLayoutInfo{};
-
-    cameraLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-
-    cameraLayoutInfo.bindingCount = 1;
-    cameraLayoutInfo.pBindings = &cameraBinding;
+    cameraLayoutInfo.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    cameraLayoutInfo.bindingCount = static_cast<uint32_t>(layoutBindings.size());
+    cameraLayoutInfo.pBindings    = layoutBindings.data();
 
     VkDescriptorSetLayout cameraDescriptorSetLayout = VK_NULL_HANDLE;
 
@@ -141,25 +158,14 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
     // 4. Create graphics pipeline
 
     //Vertex binding description, this Tells Vulkan how our vertices are arranged in memory.
-    VkVertexInputBindingDescription binding{};
-    binding.binding = 0;
-    binding.stride = sizeof(VertexSphere);
-    binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-    std::vector<VkVertexInputBindingDescription> bindings = { binding };
+    std::vector<VkVertexInputBindingDescription> bindings = {
+    EarthVertex::getBindingDescription()
+};
 
     //Vertex attribute description, Tells Vulkan which part of each vertex represents the position.
-    std::vector<VkVertexInputAttributeDescription> attributes(2);
+    auto earthAttrs = EarthVertex::getAttributeDescriptions();
+    std::vector<VkVertexInputAttributeDescription> attributes(earthAttrs.begin(), earthAttrs.end());
 
-    attributes[0].binding = 0;
-    attributes[0].location = 0; // Corresponds to shader input location 0.
-    attributes[0].format = VK_FORMAT_R32G32B32_SFLOAT; //Three 32-bit floating-point values (X, Y, Z).
-    attributes[0].offset = offsetof(VertexSphere, x); // Position starts at the beginning of our structure.
-
-    attributes[1].binding = 0;
-    attributes[1].location = 1;
-    attributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-    attributes[1].offset = offsetof(VertexSphere, nx);
 
 
     //std::vector<VkVertexInputAttributeDescription> attributes = { attribute };
@@ -239,11 +245,11 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
     };
     */
 
-    const uint32_t slices = 32;
-    const uint32_t stacks = 16;
+    const uint32_t slices = 64;
+    const uint32_t stacks = 32;
     const float radius = 1.0f;
 
-    std::vector<VertexSphere> vertices = generateSphereVertices(slices, stacks, radius);
+    std::vector<EarthVertex> vertices = generateSphereVertices(slices, stacks, radius);
 
     std::vector<uint32_t> indices = generateSphereIndices(slices, stacks);
 
@@ -254,7 +260,7 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
         {{0.0f, 0.0f, 0.0f, 1.0f}}
     } };
 
-    VkDeviceSize vBufferSize = sizeof(VertexSphere) * vertices.size();
+    VkDeviceSize vBufferSize = sizeof(EarthVertex) * vertices.size();
 
     VulkanBuffer vStagingBuffer(
         device,
@@ -303,14 +309,26 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
         MemoryType::CpuToGpu
     );
 
-    VkDescriptorPoolSize poolSize{};
-    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSize.descriptorCount = 1;
+    // Load Earth texture into VkImage
+    Texture earthTexture(
+        physicalDevice,
+        device,
+        vkSetup->getCommandPool(),
+        vkSetup->getGraphicsQueue(),
+        "assets/textures/earth.jpg"
+    );
+
+    std::array<VkDescriptorPoolSize, 2> poolSizes{};
+   
+    poolSizes[0].type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = 1;
+    poolSizes[1].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[1].descriptorCount = 1;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = 1;
-    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
     poolInfo.maxSets = 1;
 
     VkDescriptorPool cameraDescriptorPool = VK_NULL_HANDLE;
@@ -347,19 +365,33 @@ void draw(VulkanSetup* vkSetup, GLFWwindow* window)
     bufferInfo.offset = 0;
     bufferInfo.range = sizeof(CameraUniform);
 
-    VkWriteDescriptorSet descriptorWrite{};
-    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrite.dstSet = cameraDescriptorSet;
-    descriptorWrite.dstBinding = 0;
-    descriptorWrite.dstArrayElement = 0;
-    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptorWrite.descriptorCount = 1;
-    descriptorWrite.pBufferInfo = &bufferInfo;
+    VkDescriptorImageInfo imageInfo{};
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfo.imageView = earthTexture.getImageView();
+    imageInfo.sampler = earthTexture.getSampler();
+
+    
+    std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+    descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[0].dstSet = cameraDescriptorSet;
+    descriptorWrites[0].dstBinding = 0;
+    descriptorWrites[0].dstArrayElement = 0;
+    descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorWrites[0].descriptorCount = 1;
+    descriptorWrites[0].pBufferInfo = &bufferInfo;
+
+    descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[1].dstSet = cameraDescriptorSet;
+    descriptorWrites[1].dstBinding = 1;
+    descriptorWrites[1].dstArrayElement = 0;
+    descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorWrites[1].descriptorCount = 1;
+    descriptorWrites[1].pImageInfo = &imageInfo;
 
     vkUpdateDescriptorSets(
         device,
-        1,
-        &descriptorWrite,
+        static_cast<uint32_t>(descriptorWrites.size()),
+        descriptorWrites.data(),
         0,
         nullptr
     );
